@@ -1,0 +1,340 @@
+Instalação no Debian / Ubuntu
+Todos os passos a seguir foram executados com usuário 'inovadora'.
+
+
+Instalando o Ruby RVM
+1. Instalar os pacotes necessários:
+
+    sudo apt install curl libmagickwand-dev imagemagick libpq-dev git libmcrypt-dev libcurl4-openssl-dev nginx dirmngr mcrypt htop rcconf
+
+    sudo apt-get install libmagickwand-dev          
+        
+    sudo apt-get install imagemagick                      
+
+    sudo apt-get install libpq-dev                        
+
+    sudo apt-get install git
+
+    sudo apt-get install libmcrypt-dev                   
+
+    sudo apt-get install libcurl4-openssl-dev            
+
+    sudo apt-get install nginx
+
+    sudo apt-get install dirmngr                          
+
+    sudo apt-get install mcrypt                           
+
+    sudo apt-get install htop    
+    
+    sudo apt install curl                                 
+
+    sudo apt-get install rcconf
+
+2. Registrar as chaves dos repositórios de instalaçao:
+
+    command curl -sSL https://rvm.io/mpapis.asc | gpg --import -
+
+3. Instalar o RVM:
+
+    \curl -sSL https://get.rvm.io | bash -s stable --ruby
+
+4. Agora, precisamos inserir o rvm nas variáveis de ambiente. Podemos sair do terminal e entrar novamente, ou executar o seguinte comando:
+
+    source /home/inovadora/.rvm/scripts/rvm
+
+5. Atualize a lista de versões conhecidas pelo RVM:
+
+    rvm get stable
+
+6. Instalar o RVM 1.9.3, compativel com o G-HOSP:
+
+    rvm install 1.9.3
+
+7. Visualize todos os RVM disponíveis:
+
+    rvm list
+
+8. Torne o RVM 1.9.3 padrão do sistema:
+
+    rvm use 1.9.3 --default
+
+9. Instale a GEM 'bundler', que será responsável por controlar as dependências do sistema:
+
+    gem install bundler
+
+    9.1. Caso ocorra erro na instalação do 'bundler', execute:
+
+      bash -l -c 'rvm @global do gem install bundler -v "<2.0"'
+
+
+Baixando o GHosp
+1. Gerar chave SSH
+
+    ssh-keygen
+
+    Observação: Neste passo, não deve ser usada senha. Todas as perguntas do comando, devem ficar em branco.
+
+2. Exibir a chave em tela:
+
+    cat ~/.ssh/id_rsa.pub
+
+3. Entrar em contato com a Infra ou Suporte da Inovadora para fornecer a chave a ser adicionada ao repositorio.
+
+4. Clone o G-HOSP e faça checkout para a versão desejada.
+
+    cd
+    git clone git@bitbucket.org:inovadora/g-hosp-deploy.git g-hosp
+
+  Liste as versões
+
+    cd g-hosp
+    git tag -l
+
+  Mude para a versão desejada
+
+    git checkout <versao>
+
+5. Clonando o rgloader (aplicação responsável pela leitura do codigo criptografado). O rgloader deve ser clonado dentro do diretório do g-hosp.
+
+    git clone git@bitbucket.org:inovadora/rgloader.git
+
+
+Instalando o Puma (Servidor do Rails)
+1. Instalar a GEM do Puma:
+
+    gem install puma
+
+
+    Configurando o Nginx
+
+1. Criando os virtuais hosts em 'sites disponíveis'
+
+1.1 Entre no diretório '/etc/nginx/sites-avaliable'
+
+    cd /etc/nginx/sites-available
+
+1.2. Crie o virtual-host do módulo CG
+
+    Todos os parâmetros usados são nativos do NGINX 1.10.3, e auxiliam na melhoria do uso dos recursos de hardware.
+
+upstream <modulo>_upstream 
+   {
+      server unix:///tmp/<modulo>.socket;
+   }
+
+server 
+   {
+      listen <porta>;
+      server_name <modulo>.<dominio>;
+      root /home/inovadora/g-hosp/<modulo>/public;
+      location / 
+         {
+             proxy_pass http://<modulo>_upstream;
+             proxy_set_header Host $host;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+             proxy_read_timeout 300;
+         }
+      location ~* ^/assets/ 
+         {
+            expires 1y;
+            add_header Cache-Control public;
+            add_header Last-Modified "";
+            add_header ETag "";
+            break;
+         }
+   }
+
+---------------------------------------------------------------------------------
+
+1.3. Com o mesmo processo do item 1.2, crie todos os virtual hosts necessários, um para cada módulo. Lembre-se que somente o CG pode ser o site "default", sendo que nos demais esta opção deve ser removida. Ao término da criação de todos os virtual hosts, ative todos, com o seguinte comando:
+
+    sudo ln -s /etc/nginx/sites-available/* /etc/nginx/sites-enabled
+
+1.4. Reinicie o Nginx, para que os novos sites sejam reconhecidos.
+
+    sudo /etc/init.d/nginx restart
+
+
+Configuração do banco de dados
+1. Dentro do diretório raiz da aplicação, execute:
+
+    nano/vi .ghosp.yml
+
+2. Em seguida, garanta que ele contenha o seguinte conteúdo:
+
+    #Ambiente de desenvolvimento
+    development:
+       adapter:  postgresql
+       encoding: utf8
+       database: banco_do_cliente
+       username: postgre
+       password: senha_do_cliente                
+       host:     ip_do_cliente
+       porta_mordomo: 7001
+       schema_search_path: gestho, public, mordomo, prescricao, ct, gemus
+       port: 5432
+       ip_mordomo: ip_do_cliente
+       database_mordomo: banco_do_cliente
+    
+    #Ambiente de produção
+    production:
+       adapter:  postgresql
+       encoding: utf8
+       database: banco_do_cliente
+       username: postgre
+       password: senha_do_cliente                
+       host:     ip_do_cliente
+       porta_mordomo: 7001
+       schema_search_path: gestho, public, mordomo, prescricao, ct, gemus
+       port: 5432
+       ip_mordomo: ip_do_cliente
+       database_mordomo: banco_do_cliente
+
+3. Em seguida, dentro de cada módulo, execute os seguintes comandos:
+
+    gem install bundle
+    bundle install
+    mkdir tmp
+    mkdir tmp/pids
+
+ # Na pasta raiz do G-HOSP
+    . scripts/gera_puma_rb.sh <modulo>
+
+
+4. Inicialize todos os módulos
+
+    . scripts/web_start_tudo
+
+ - Visualise se os modulos estão rodando com o comando:
+
+ps -ef | grep puma
+
+ - Deve-se apresentar algo como:
+
+https://i.imgur.com/L9AyVv6.png
+
+
+---------------------
+==== Observações ====
+---------------------
+
+# Erro Rails6 #
+
+ Se apresentar o seguinte erro:
+
+https://i.imgur.com/Jc01fo0.png
+
+ Deve-se rodar o seguinte comando dentro de cada modulo:
+
+RAILS_ENV=production bundle exec rake assets:precompile
+
+
+# Log de erro do puma #
+
+ Geralmente fica na pasta <modulo>/log/<puma.log>
+
+
+
+
+
+
+
+
+
+
+
+
+
+-------------------------------------------------------------------
+---------------------- Instalação do mordomo ----------------------
+-------------------------------------------------------------------
+
+Instale o Mordomo
+1. Instale o Java 1.8 
+
+
+  wget https://ftp.osuosl.org/pub/blfs/conglomeration/openjdk/OpenJDK-1.8.0.141-x86_64-bin.tar.xz
+
+  sudo mkdir /usr/lib/jvm
+  
+  sudo tar -xf OpenJDK-1.8.0.141-x86_64-bin.tar.xz -C  /usr/lib/jvm
+  
+  sudo update-alternatives --install "/usr/bin/java" "java" "/usr/lib/jvm/OpenJDK-1.8.0.141-x86_64-bin/bin/java" 1
+  
+  sudo update-alternatives --install "/usr/bin/javac" "javac" "/usr/lib/jvm/OpenJDK-1.8.0.141-x86_64-bin/bin/javac" 1
+  
+  java -version
+  
+  sudo apt-get install default-jdk
+  
+  sudo update-alternatives --config java
+  
+  sudo update-alternatives --config javac 
+
+
+2. Clone e configure o mordomo
+
+2.1. Acesse o diretório da aplicação:
+
+    cd /home/inovadora/g-hosp
+
+2.2. Clone o mordomo
+
+    git clone git@bitbucket.org:inovadora-ti/mordomo.git
+
+2.3. Crie o script de inicialização do mordomo:
+
+    cd /etc/init.d
+    sudo nano/vi mordomo
+
+Dentro deste arquivo, insira o seguinte texto:
+
+    #!/bin/sh
+    # chkconfig: 345 99 10
+    # description: Script para ativação e desativação do Mordomo
+    # Inovadora Sistemas
+    
+    start (){
+      echo "Iniciando o Mordomo" 
+      cd /home/inovadora/g-hosp/mordomo/
+      nohup java -jar /home/inovadora/g-hosp/mordomo/Mordomo.jar </dev/null >>/home/inovadora/g-hosp/mordomo/log_mordomo_g-hosp.log 2>>/home/inovadora/g-hosp/mordomo/log_mordomo_g-hosp.log  &
+    }
+    stop (){
+      echo "Finalizando o Mordomo" 
+      kill `pgrep -f "Mordomo.jar"`
+    }
+    restart (){
+      stop;
+      sleep 3
+      start;
+    }
+    
+    case "$1" in
+    start) start
+    ;;
+    stop) stop
+    ;;
+    restart) restart
+    ;;
+    *) echo "Uso: mordomo (start|stop|restart)" 
+    ;;
+    esac
+
+
+
+
+2.4. Em seguida, forneça permissão ao script para ser executado como aplicativo
+
+    sudo chmod +x mordomo
+
+2.5. Configure o mordomo para iniciar automaticamente com o sistema
+
+    sudo rcconf
+
+2.6. Configure o mordomo para acesso aos bancos de dados corretos:
+
+    cd /home/inovadora/g-hosp/mordomo
+    java -jar Mordomo.jar -configcharacter
+
+Após executar este comando, responda todas as perguntas, fazendo com que o Mordomo se conecte nos locais adequados.
